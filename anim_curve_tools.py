@@ -81,6 +81,10 @@ class KeyCurveSwitchOp(bpy.types.Operator):
                         if x.select]
         if len(sel_curves) != 1:
             return False
+        
+        if sel_curves[0].lock:
+            return False
+        
         return True
 
     def execute(self, context):
@@ -113,6 +117,9 @@ class KeySelectionOperator(bpy.types.Operator):
         sel_curves = [x for x in ob.animation_data.action.fcurves 
                         if x.select]
         if len(sel_curves) != 1:
+            return False
+        
+        if sel_curves[0].lock:
             return False
         
         return True
@@ -155,7 +162,11 @@ class AlignKeyframeTopsOperator(bpy.types.Operator):
         # selected curve has to have 2 or more selected points
         fcurves = ob.animation_data.action.fcurves
         fcurve = [x for x in fcurves if x.select][-1]
-        pts = [x for x in fcurve.keyframe_points if x.select_control_point]  
+        pts = [x for x in fcurve.keyframe_points if x.select_control_point] 
+        
+        if fcurve.lock:
+            return False
+         
         return len(pts) >= 2
         
             
