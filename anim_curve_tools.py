@@ -1,5 +1,37 @@
 # anim_curve_tools.py
-# by Phil Cote
+# by cotejrp1
+
+# ***** BEGIN GPL LICENSE BLOCK *****
+#
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software Foundation,
+# Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+#
+# ***** END GPL LICENCE BLOCK *****
+
+# (c) 2011 Phil Cote (cotejrp1)
+
+bl_info = {
+    'name': 'FCurve Anim Tools',
+    'author': 'cotejrp1',
+    'version': (0, 1),
+    "blender": (2, 6, 3),
+    'location': 'Properties > Object Data',
+    'description': 'Manipulates animation f-curves',
+    'warning': '',  # used for warning icon and text in addons panel
+    'category': 'Animation'}
+
 
 import bpy
 from bpy.props import IntProperty, BoolProperty, EnumProperty
@@ -128,6 +160,8 @@ class KeySelectionOperator(bpy.types.Operator):
     def execute(self, context):
         ob = context.object
         nth = ob.everyNth
+        offset = ob.n_offset
+        
         fcurves = ob.animation_data.action.fcurves
         fcurve = [x for x in fcurves if x.select][-1]
         
@@ -136,16 +170,21 @@ class KeySelectionOperator(bpy.types.Operator):
             cp.select_left_handle = ob.checkLeftHandle and sel
             cp.select_right_handle = ob.checkRightHandle and sel
         
-        for i, x in enumerate(fcurve.keyframe_points):
+        #deselecting ensures that offsets are taken into account.
+        for cp in fcurve.keyframe_points:
+            set_cp(cp,False)
+        
+        #do the selections
+        for i, x in enumerate(fcurve.keyframe_points[offset:]):
             sel_pt = i % nth == 0
             set_cp(x, sel_pt)
             
         return {'FINISHED'}
 
 
-class AlignKeyframeTopsOperator(bpy.types.Operator):
-    bl_idname = "anim.align_key_tops"
-    bl_label = "Align Selected Keyframe Tops"
+class AlignKeyframeOperator(bpy.types.Operator):
+    bl_idname = "anim.align_keys"
+    bl_label = "Align Selected Key Points"
     
     
     @classmethod
@@ -198,31 +237,44 @@ class FCurvePanel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         obj = context.object
+        
+        row = layout.row()
+        row.label(text="Keypoint Selector")
         row = layout.row()
         row.prop(obj, "checkLeftHandle")
         row.prop(obj, "checkRightHandle")
-        
         row = layout.row()
         row.prop(obj, "everyNth")
         row = layout.row()
-        row.operator(KeySelectionOperator.bl_idname)
+        row.prop(obj, "n_offset")
+        row = layout.row()
+        row.operator(KeySelectionOperator.bl_idname, text="Select Keys")
         
         row = layout.row()
         row.separator()
-        
+        row = layout.row()
+        row.label(text="Keypoint Aligner")
         row = layout.row()
         row.prop(obj, "top_or_bottom")
         row = layout.row()
-        row.operator(AlignKeyframeTopsOperator.bl_idname)
+        row.operator(AlignKeyframeOperator.bl_idname)
         
+        row = layout.row()
+        row.separator()
+        row = layout.row()
+        row.label(text="Keypoint Flipper")
         row = layout.row()
         row.operator(KeyCurveSwitchOp.bl_idname)
 
 
 def register():
     ob_type = bpy.types.Object
+    ob_type.n_offset = IntProperty(name="Offset",
+                                    min=0, max=10,default=0,
+                                   description="Put Offset val for every nth")
     ob_type.everyNth = IntProperty(name = "Every Nth Key", 
                             min=1, max=10,default=2)
+                            
     ob_type.checkLeftHandle = BoolProperty( name="Left Handle", default=True)
     ob_type.checkRightHandle = BoolProperty( name="Right Handle", default=True)
     
@@ -230,17 +282,17 @@ def register():
                     ("lowest", "lowest", "lowest"), ]
     ob_type.top_or_bottom = EnumProperty(name="Align Keyframe Points To",
                             items = choice_vals, default="highest",
-                            description="Align keyframe points to:")
+                            description="Align keyframe points to")
                             
     bpy.utils.register_class(KeyCurveSwitchOp)
     bpy.utils.register_class(KeySelectionOperator)
-    bpy.utils.register_class(AlignKeyframeTopsOperator)
+    bpy.utils.register_class(AlignKeyframeOperator)
     bpy.utils.register_class(FCurvePanel)
 
 
 def unregister():
     bpy.utils.unregister_class(FCurvePanel)
-    bpy.utils.unregister_class(AlignKeyframeTopsOperator)
+    bpy.utils.unregister_class(AlignKeyframeOperator)
     bpy.utils.unregister_class(KeyCurveSwitchOp)
     bpy.utils.unregister_class(KeySelectionOperator)
     
