@@ -45,7 +45,8 @@ def chunks(lst, n):
     """
     Taken from stack overflow so to easily split off keypoints into pairs.
     Credit due here...
-    http://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks-in-python
+    http://stackoverflow.com/questions/
+    312443/how-do-you-split-a-list-into-evenly-sized-chunks-in-python
     """
     for i in range(0, len(lst), n):
         yield lst[i:i+n]
@@ -92,32 +93,38 @@ def main(context):
         swap_pair(pair)
             
 
+def op_rules(context):
+    """
+    Poll rules for all curve operators.
+    """
+    # there has to be a selected object
+    ob = context.active_object
+    if ob is None:
+        return False
+    
+    # there has to be one and only one curve selected
+    sel_curves = [x for x in ob.animation_data.action.fcurves 
+                    if x.select]
+    if len(sel_curves) != 1:
+        return False
+    
+    # curve in question cannot be locked.
+    if sel_curves[0].lock:
+        return False
+    
+    return True
+
 
 class KeyCurveSwitchOp(bpy.types.Operator):
     """Switches heights for selected keyframes.  
-    NOTE: Only works when just one curve is selected."""
+    NOTE: Only works when just one curve is selected"""
     bl_idname = "anim.keycurve_switcher"
     bl_label = "Flip Keyframe Points"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        
-        # object has to exist
-        ob = context.active_object
-        if ob is None:
-            return False
-        
-        # there has to be one and only one curve selected
-        sel_curves = [x for x in ob.animation_data.action.fcurves 
-                        if x.select]
-        if len(sel_curves) != 1:
-            return False
-        
-        if sel_curves[0].lock:
-            return False
-        
-        return True
+        return op_rules(context)
 
     def execute(self, context):
         ob = context.object
@@ -142,25 +149,14 @@ class KeySelectionOperator(bpy.types.Operator):
 
     @classmethod
     def poll(cls, context):
-        ob = context.object
-        if ob is None or ob.animation_data is None:
-            return False
-        
-        sel_curves = [x for x in ob.animation_data.action.fcurves 
-                        if x.select]
-        if len(sel_curves) != 1:
-            return False
-        
-        if sel_curves[0].lock:
-            return False
-        
-        return True
+        return op_rules(context)
                 
                 
     def execute(self, context):
         ob = context.object
         nth = ob.everyNth
         offset = ob.n_offset
+        right_offset = -ob.right_offset if ob.right_offset != 0 else None
         
         fcurves = ob.animation_data.action.fcurves
         fcurve = [x for x in fcurves if x.select][-1]
@@ -175,7 +171,7 @@ class KeySelectionOperator(bpy.types.Operator):
             set_cp(cp,False)
         
         #do the selections
-        for i, x in enumerate(fcurve.keyframe_points[offset:]):
+        for i, x in enumerate(fcurve.keyframe_points[offset:right_offset]):
             sel_pt = i % nth == 0
             set_cp(x, sel_pt)
             
@@ -189,25 +185,17 @@ class AlignKeyframeOperator(bpy.types.Operator):
     
     @classmethod
     def poll(cls, context):
-        ob = context.object
-        if ob is None or ob.animation_data is None:
-            return False
-        
-        crvs = ob.animation_data.action.fcurves
-        crvs = [x for x in crvs if x.select]
-        if len(crvs) != 1:
+        other_rules_passed = op_rules(context)
+        if not other_rules_passed:
             return False
         
         # selected curve has to have 2 or more selected points
-        fcurves = ob.animation_data.action.fcurves
+        fcurves = context.active_object.animation_data.action.fcurves
         fcurve = [x for x in fcurves if x.select][-1]
         pts = [x for x in fcurve.keyframe_points if x.select_control_point] 
-        
-        if fcurve.lock:
-            return False
-         
         return len(pts) >= 2
         
+
             
     def execute(self, context):
         ob = context.object
@@ -225,6 +213,27 @@ class AlignKeyframeOperator(bpy.types.Operator):
             kp.handle_right.y = max_y_val
             
         return {'FINISHED'}    
+
+class EvenOutHandlesOperator(bpy.types.Operator):
+    bl_idname = "anim.evenout_handles"
+    bl_label = "Even Out Handles"
+
+    @classmethod
+    def poll(cls, context):
+        return op_rules(context)
+
+    def execute(self, context):
+        ob = context.object
+        fcurves = ob.animation_data.action.fcurves
+        fcurve = [x for x in fcurves if x.select][-1]
+        kps = [x for x in fcurve.keyframe_points if x.select_control_point]
+        for kp in kps:
+            diff_y = kp.co.y - kp.handle_left.y
+            diff_x = kp.co.x - kp.handle_left.x
+            kp.handle_right.x = kp.co.x + diff_x
+            kp.handle_right.y = kp.co.y + diff_y
+
+        return {'FINISHED'}
     
 class FCurvePanel(bpy.types.Panel):
     """Creates a Panel in the Object properties window"""
@@ -248,6 +257,8 @@ class FCurvePanel(bpy.types.Panel):
         row = layout.row()
         row.prop(obj, "n_offset")
         row = layout.row()
+        row.prop(obj, "right_offset")
+        row = layout.row()
         row.operator(KeySelectionOperator.bl_idname, text="Select Keys")
         
         row = layout.row()
@@ -265,11 +276,21 @@ class FCurvePanel(bpy.types.Panel):
         row.label(text="Keypoint Flipper")
         row = layout.row()
         row.operator(KeyCurveSwitchOp.bl_idname)
-
+        row = layout.row()
+        row.separator()
+        row = layout.row()
+        row.label(text="Even out handles")
+        row = layout.row()
+        row.operator(EvenOutHandlesOperator.bl_idname)
 
 def register():
     ob_type = bpy.types.Object
-    ob_type.n_offset = IntProperty(name="Offset",
+    ob_type.right_offset = IntProperty(name="Right Offset",
+                                    min=0, max=10, default=0,
+                                    description="Put Right Offset")
+
+                                        
+    ob_type.n_offset = IntProperty(name="Left Offset",
                                     min=0, max=10,default=0,
                                    description="Put Offset val for every nth")
     ob_type.everyNth = IntProperty(name = "Every Nth Key", 
@@ -283,7 +304,8 @@ def register():
     ob_type.top_or_bottom = EnumProperty(name="Align Keyframe Points To",
                             items = choice_vals, default="highest",
                             description="Align keyframe points to")
-                            
+    
+    bpy.utils.register_class(EvenOutHandlesOperator) 
     bpy.utils.register_class(KeyCurveSwitchOp)
     bpy.utils.register_class(KeySelectionOperator)
     bpy.utils.register_class(AlignKeyframeOperator)
@@ -293,6 +315,7 @@ def register():
 def unregister():
     bpy.utils.unregister_class(FCurvePanel)
     bpy.utils.unregister_class(AlignKeyframeOperator)
+    bpy.utils.unregister_class(EvenOutHandlesOperator)
     bpy.utils.unregister_class(KeyCurveSwitchOp)
     bpy.utils.unregister_class(KeySelectionOperator)
     
