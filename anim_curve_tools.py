@@ -194,9 +194,11 @@ class AlignKeyframeOperator(bpy.types.Operator):
         max_y_val = f([x.co.y for x in kps])
         
         for kp in kps:
+            left_diff_y = kp.co.y - kp.handle_left.y
+            right_diff_y = kp.co.y - kp.handle_right.y
             kp.co.y = max_y_val
-            kp.handle_left.y = max_y_val
-            kp.handle_right.y = max_y_val
+            kp.handle_left.y = max_y_val + left_diff_y
+            kp.handle_right.y = max_y_val + right_diff_y
             
         return {'FINISHED'}    
 
