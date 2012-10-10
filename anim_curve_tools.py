@@ -210,13 +210,23 @@ class EvenOutHandlesOperator(bpy.types.Operator):
         return op_rules(context)
 
     def execute(self, context):
+        handle_choice = context.object.handle_choice
+        
         kps = get_key_points(context)
         kps = [x for x in kps if x.select_control_point]
-        for kp in kps:
-            diff_y = kp.co.y - kp.handle_left.y
-            diff_x = kp.co.x - kp.handle_left.x
-            kp.handle_right.x = kp.co.x + diff_x
-            kp.handle_right.y = kp.co.y + diff_y
+        
+        if handle_choice == "left":
+            for kp in kps:
+                diff_y = kp.co.y - kp.handle_left.y
+                diff_x = kp.co.x - kp.handle_left.x
+                kp.handle_right.x = kp.co.x + diff_x
+                kp.handle_right.y = kp.co.y + diff_y
+        else:
+            for kp in kps:
+                diff_y = kp.co.y - kp.handle_right.y
+                diff_x = kp.co.x - kp.handle_right.x
+                kp.handle_left.x = kp.co.x + diff_x
+                kp.handle_left.y = kp.co.y + diff_y
 
         return {'FINISHED'}
     
@@ -267,6 +277,7 @@ class FCurvePanel(bpy.types.Panel):
         row = layout.row()
         row.label(text="Even out handles")
         row = layout.row()
+        row.prop(obj, "handle_choice")
         row.operator(EvenOutHandlesOperator.bl_idname)
 
 def register():
@@ -291,6 +302,10 @@ def register():
                             items = choice_vals, default="highest",
                             description="Align keyframe points to")
     
+    ob_type.handle_choice = EnumProperty(name="Handle to Match",
+                                    items = [("left", "left", "left"), ("right", "right", "right"), ],
+                                    default="left",
+                                    description="Which curve handle length to match up with.")
     
     bpy.utils.register_class(EvenOutHandlesOperator) 
     bpy.utils.register_class(KeyCurveSwitchOp)
